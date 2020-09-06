@@ -18,7 +18,9 @@ define Device/bpi_bananapi-r64-rootdisk
   SUPPORTED_DEVICES := bananapi,bpi-r64
   DEVICE_PACKAGES := kmod-usb-ohci kmod-usb2 kmod-usb3 kmod-ata-ahci-mtk
   IMAGES := sysupgrade-emmc.bin.gz
+  IMAGES += fullimage-emmc.bin.gz
   IMAGE/sysupgrade-emmc.bin.gz := sysupgrade-emmc | gzip | append-metadata
+  IMAGE/fullimage-emmc.bin.gz := fullimage-emmc | gzip | append-metadata
 endef
 TARGET_DEVICES += bpi_bananapi-r64-rootdisk
 
