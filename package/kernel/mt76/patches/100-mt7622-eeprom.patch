@@ -129,62 +129,71 @@ Index: a/tools/eeprom.c
 +	fd = open(eeprom_file, O_RDWR | O_CREAT | O_EXCL, S_IRUSR|S_IWUSR);
  	if (fd < 0)
  		goto out;
- 
-Index: a/mt7615/mt7615.h
-===================================================================
---- a/mt7615/mt7615.h
-+++ b/mt7615/mt7615.h
-@@ -33,8 +33,6 @@
- #define MT7615_RX_RING_SIZE		1024
- #define MT7615_RX_MCU_RING_SIZE		512
- 
--#define MT7615_DRV_OWN_RETRY_COUNT	10
--
- #define MT7615_FIRMWARE_CR4		"mediatek/mt7615_cr4.bin"
- #define MT7615_FIRMWARE_N9		"mediatek/mt7615_n9.bin"
- #define MT7615_ROM_PATCH		"mediatek/mt7615_rom_patch.bin"
+
 Index: a/mt7615/mcu.c
 ===================================================================
 --- a/mt7615/mcu.c
 +++ b/mt7615/mcu.c
-@@ -338,6 +338,8 @@ static int mt7615_mcu_drv_pmctrl(struct mt7615_dev *dev)
+@@ -338,28 +338,46 @@ static int mt7615_mcu_drv_pmctrl(struct mt7615_dev *dev)
  {
  	struct mt76_phy *mphy = &dev->mt76.phy;
  	struct mt76_dev *mdev = &dev->mt76;
-+	int timeout = is_mt7663(mdev) ? 50 : 3000;
-+	int n_retry = is_mt7663(mdev) ? 10 : 1000;
- 	int i;
+-	int i;
++	u32 addr;
++	int err;
  
- 	if (!test_and_clear_bit(MT76_STATE_PM, &mphy->state))
-@@ -345,20 +347,24 @@ static int mt7615_mcu_drv_pmctrl(struct
+-	if (!test_and_clear_bit(MT76_STATE_PM, &mphy->state))
+-		goto out;
++	addr = is_mt7663(mdev) ? MT_PCIE_DOORBELL_PUSH : MT_CFG_LPCR_HOST;
++	mt76_wr(dev, addr, MT_CFG_LPCR_HOST_DRV_OWN);
  
  	mt7622_trigger_hif_int(dev, true);
  
 -	for (i = 0; i < MT7615_DRV_OWN_RETRY_COUNT; i++) {
-+	for (i = 0; i < n_retry; i++) {
- 		u32 addr;
+-		u32 addr;
++	addr = is_mt7663(mdev) ? MT_CONN_HIF_ON_LPCTL : MT_CFG_LPCR_HOST;
++	err = !mt76_poll_msec(dev, addr, MT_CFG_LPCR_HOST_FW_OWN, 0, 3000);
  
- 		addr = is_mt7663(mdev) ? MT_PCIE_DOORBELL_PUSH : MT_CFG_LPCR_HOST;
- 		mt76_wr(dev, addr, MT_CFG_LPCR_HOST_DRV_OWN);
+-		addr = is_mt7663(mdev) ? MT_PCIE_DOORBELL_PUSH : MT_CFG_LPCR_HOST;
+-		mt76_wr(dev, addr, MT_CFG_LPCR_HOST_DRV_OWN);
++	mt7622_trigger_hif_int(dev, false);
  
- 		addr = is_mt7663(mdev) ? MT_CONN_HIF_ON_LPCTL : MT_CFG_LPCR_HOST;
+-		addr = is_mt7663(mdev) ? MT_CONN_HIF_ON_LPCTL : MT_CFG_LPCR_HOST;
 -		if (mt76_poll_msec(dev, addr, MT_CFG_LPCR_HOST_FW_OWN, 0, 50))
-+		if (mt76_poll_msec(dev, addr, MT_CFG_LPCR_HOST_FW_OWN, 0,
-+				   timeout))
- 			break;
+-			break;
++	if (err) {
++		dev_err(mdev->dev, "driver own failed\n");
++		return -ETIMEDOUT;
  	}
  
- 	mt7622_trigger_hif_int(dev, false);
- 
--	if (i == MT7615_DRV_OWN_RETRY_COUNT) {
-+	if(i < n_retry)
-+		dev_err(mdev->dev, "It took %d tries\n",i+1);
+-	mt7622_trigger_hif_int(dev, false);
++	clear_bit(MT76_STATE_PM, &mphy->state);
 +
-+	if (i == n_retry) {
- 		dev_err(mdev->dev, "driver own failed\n");
++	return 0;
++}
++
++static int mt7615_mcu_lp_drv_pmctrl(struct mt7615_dev *dev)
++{
++	struct mt76_phy *mphy = &dev->mt76.phy;
++	int i;
++
++	if (!test_and_clear_bit(MT76_STATE_PM, &mphy->state))
++		goto out;
++
++	for (i = 0; i < MT7615_DRV_OWN_RETRY_COUNT; i++) {
++		mt76_wr(dev, MT_PCIE_DOORBELL_PUSH, MT_CFG_LPCR_HOST_DRV_OWN);
++		if (mt76_poll_msec(dev, MT_CONN_HIF_ON_LPCTL,
++				   MT_CFG_LPCR_HOST_FW_OWN, 0, 50))
++			break;
++	}
+ 
+ 	if (i == MT7615_DRV_OWN_RETRY_COUNT) {
+-		dev_err(mdev->dev, "driver own failed\n");
++		dev_err(dev->mt76.dev, "driver own failed\n");
  		set_bit(MT76_STATE_PM, &mphy->state);
  		return -EIO;
-@@ -386,7 +392,7 @@ static int mt7615_mcu_fw_pmctrl(struct m
+ 	}
+@@ -386,7 +404,7 @@ static int mt7615_mcu_fw_pmctrl(struct mt7615_dev *dev)
  
  	if (is_mt7622(&dev->mt76) &&
  	    !mt76_poll_msec(dev, addr, MT_CFG_LPCR_HOST_FW_OWN,
@@ -193,3 +202,12 @@ Index: a/mt7615/mcu.c
  		dev_err(dev->mt76.dev, "Timeout for firmware own\n");
  		clear_bit(MT76_STATE_PM, &mphy->state);
  		err = -EIO;
+@@ -1901,7 +1919,7 @@ static const struct mt7615_mcu_ops uni_update_ops = {
+ 	.add_rx_ba = mt7615_mcu_uni_rx_ba,
+ 	.sta_add = mt7615_mcu_uni_add_sta,
+ 	.set_drv_ctrl = mt7615_mcu_drv_pmctrl,
+-	.set_fw_ctrl = mt7615_mcu_fw_pmctrl,
++	.set_fw_ctrl = mt7615_mcu_lp_drv_pmctrl,
+ };
+ 
+ static int mt7615_mcu_send_firmware(struct mt7615_dev *dev, const void *data,
