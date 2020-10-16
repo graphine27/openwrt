@@ -315,7 +315,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +		fl.u.ip4.flowi4_oif = ifindex;
 +		break;
 +	case NFPROTO_IPV6:
-+		fl.u.ip6.saddr = ct->tuplehash[dir].tuple.dst.u3.in6;
++		//fl.u.ip6.saddr = ct->tuplehash[dir].tuple.dst.u3.in6;
 +		fl.u.ip6.daddr = ct->tuplehash[dir].tuple.src.u3.in6;
 +		fl.u.ip6.flowi6_oif = ifindex;
 +		break;
