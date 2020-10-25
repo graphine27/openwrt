@@ -126,6 +126,10 @@ export_bootdevice() {
 
 	if read cmdline < /proc/cmdline; then
 		case "$cmdline" in
+			*block2mtd=*)
+				bootdisk="${cmdline##*block2mtd=}"
+				bootdisk="${bootdisk%%,*}"
+			;;
 			*root=*)
 				rootpart="${cmdline##*root=}"
 				rootpart="${rootpart%% *}"
