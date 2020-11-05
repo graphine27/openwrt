@@ -43,3 +43,14 @@ define Device/marvell_macchiatobin-singleshot
   SUPPORTED_DEVICES := marvell,armada8040-mcbin-singleshot
 endef
 TARGET_DEVICES += marvell_macchiatobin-singleshot
+
+define Device/solidrun_clearfog-gt-8k
+  $(call Device/Default-arm64)
+  DEVICE_TITLE := SolidRun ClearFog GT 8K
+  DEVICE_VENDOR := SolidRun
+  DEVICE_MODEL := ClearFog GT 8K
+  DEVICE_DTS := armada-8040-clearfog-gt-8k
+  SUPPORTED_DEVICES := solidrun,clearfog-gt-8k
+  BOOT_SCRIPT := clearfog
+endef
+TARGET_DEVICES += solidrun_clearfog-gt-8k

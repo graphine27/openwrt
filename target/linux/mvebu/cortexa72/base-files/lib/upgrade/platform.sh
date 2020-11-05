@@ -10,7 +10,8 @@ REQUIRE_IMAGE_METADATA=1
 platform_check_image() {
 	case "$(board_name)" in
 	marvell,armada8040-mcbin-doubleshot|\
-	marvell,armada8040-mcbin-singleshot)
+	marvell,armada8040-mcbin-singleshot|\
+	solidrun,clearfog-gt-8k)
 		platform_check_image_sdcard "$1"
 		;;
 	*)
@@ -22,7 +23,8 @@ platform_check_image() {
 platform_do_upgrade() {
 	case "$(board_name)" in
 	marvell,armada8040-mcbin-doubleshot|\
-	marvell,armada8040-mcbin-singleshot)
+	marvell,armada8040-mcbin-singleshot|\
+	solidrun,clearfog-gt-8k)
 		platform_do_upgrade_sdcard "$1"
 		;;
 	*)
@@ -33,7 +35,8 @@ platform_do_upgrade() {
 platform_copy_config() {
 	case "$(board_name)" in
 	marvell,armada8040-mcbin-doubleshot|\
-	marvell,armada8040-mcbin-singleshot)
+	marvell,armada8040-mcbin-singleshot|\
+	solidrun,clearfog-gt-8k)
 		platform_copy_config_sdcard
 		;;
 	esac
