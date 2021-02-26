@@ -16,15 +16,29 @@ define Build/sysupgrade-emmc
 		$(IMAGE_ROOTFS)
 endef
 
+define Build/fullimage-emmc
+	rm -f $@.recovery
+	mkfs.fat -C $@.recovery 3070
+
+	./gen_mtk_emmc_fullimg.sh $@ \
+		./mtk-bin-r64/GPT_EMMC \
+		./mtk-bin-r64/mtk-bpi-r64-preloader-emmc.bin \
+		./mtk-bin-r64/bpi-r64-atf.img \
+		./mtk-bin-r64/mtk-bpi-r64-uboot-emmc.bin \
+		$(IMAGE_KERNEL) \
+		$@.recovery \
+		$(IMAGE_ROOTFS)
+endef
+
 # default all platform image(fit) build 
 define Device/Default
   PROFILES = Default $$(DEVICE_NAME)
   KERNEL_NAME := Image
-  KERNEL = kernel-bin | lzma | \
-	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
+  KERNEL = kernel-bin | \
+	fit none $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
   KERNEL_INITRAMFS = kernel-bin | lzma | \
 	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd
-  FILESYSTEMS := squashfs
+  FILESYSTEMS := ext4
   DEVICE_DTS_DIR := $(DTS_DIR)
   IMAGES := sysupgrade.bin
   IMAGE/sysupgrade.bin := append-kernel | pad-to 128k | append-rootfs | \

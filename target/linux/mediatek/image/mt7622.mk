@@ -1,5 +1,10 @@
 DTS_DIR := $(DTS_DIR)/mediatek
-KERNEL_LOADADDR := 0x44080000
+ifdef CONFIG_LINUX_5_4
+  KERNEL_LOADADDR := 0x44080000
+else
+  KERNEL_LOADADDR := 0x44000000
+endif
+
 
 define Device/bpi_bananapi-r64
   DEVICE_VENDOR := Bpi
@@ -13,13 +18,15 @@ TARGET_DEVICES += bpi_bananapi-r64
 define Device/bpi_bananapi-r64-rootdisk
   DEVICE_VENDOR := Bpi
   DEVICE_MODEL := Banana Pi R64 (rootdisk)
-  DEVICE_DTS := mt7622-bananapi-bpi-r64-rootdisk
+  DEVICE_DTS := mt7622-bananapi-bpi-r64-rootdisk-ext4
   DEVICE_DTS_DIR := ../dts
   SUPPORTED_DEVICES := bananapi,bpi-r64
   DEVICE_PACKAGES := kmod-fs-vfat kmod-nls-cp437 kmod-nls-iso8859-1 \
 	mkf2fs e2fsprogs kmod-usb-ohci kmod-usb2 kmod-usb3 kmod-ata-ahci-mtk
   IMAGES := sysupgrade-emmc.bin.gz
+  IMAGES += fullimage-emmc.bin.gz
   IMAGE/sysupgrade-emmc.bin.gz := sysupgrade-emmc | gzip | append-metadata
+  IMAGE/fullimage-emmc.bin.gz := fullimage-emmc | gzip | append-metadata
 endef
 TARGET_DEVICES += bpi_bananapi-r64-rootdisk
 
@@ -31,7 +38,7 @@ define Device/elecom_wrc-2533gent
   DEVICE_PACKAGES := kmod-usb-ohci kmod-usb2 kmod-usb3 kmod-mt7615e \
 	kmod-mt7615-firmware kmod-btmtkuart swconfig
 endef
-TARGET_DEVICES += elecom_wrc-2533gent
+#TARGET_DEVICES += elecom_wrc-2533gent
 
 define Device/mediatek_mt7622-rfb1
   DEVICE_VENDOR := MediaTek
@@ -57,7 +64,7 @@ define Device/mediatek_mt7622-ubi
   IMAGE/sysupgrade.bin := sysupgrade-tar
   DEVICE_PACKAGES := kmod-usb-ohci kmod-usb2 kmod-usb3 kmod-ata-ahci-mtk
 endef
-TARGET_DEVICES += mediatek_mt7622-ubi
+#TARGET_DEVICES += mediatek_mt7622-ubi
 
 define Device/ubnt_unifi-6-lr
   DEVICE_VENDOR := Ubiquiti
@@ -66,4 +73,4 @@ define Device/ubnt_unifi-6-lr
   DEVICE_DTS_DIR := ../dts
   DEVICE_PACKAGES := kmod-mt7915e
 endef
-TARGET_DEVICES += ubnt_unifi-6-lr
+#TARGET_DEVICES += ubnt_unifi-6-lr
