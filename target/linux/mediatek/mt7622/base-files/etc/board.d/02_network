@@ -8,7 +8,6 @@ mediatek_setup_interfaces()
 	local board="$1"
 
 	case $board in
-	bananapi,bpi-r64|\
 	linksys,e8450|\
 	linksys,e8450-ubi|\
 	mediatek,mt7622-rfb1|\
@@ -29,7 +28,7 @@ mediatek_setup_interfaces()
 		;;
 	*)
 		ucidef_add_switch "switch0" \
-				  "0:lan" "1:lan" "2:lan" "3:lan" "4:wan" "6u@eth0" "5u@eth1"
+				  "1:lan" "2:lan" "3:lan" "4:lan" "6u@eth0" "0:wan" "5u@eth1"
 		;;
 	esac
 }
