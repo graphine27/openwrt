@@ -59,7 +59,7 @@ define Device/marvell_clearfog-gt-8k
   DEVICE_VARIANT := GT-8K
   DEVICE_PACKAGES += kmod-i2c-mux-pca954x kmod-crypto-hw-safexcel
   DEVICE_DTS := armada-8040-clearfog-gt-8k
-  SUPPORTED_DEVICES := marvell,armada8040-clearfog-gt-8k
+  SUPPORTED_DEVICES := solidrun,clearfog-gt-8k
 endef
 TARGET_DEVICES += marvell_clearfog-gt-8k
 
