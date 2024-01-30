@@ -227,8 +227,7 @@ $(eval $(foreach S,$(NAND_BLOCKSIZE),$(call Image/mkfs/jffs2-nand/template,$(S))
 define Image/mkfs/squashfs-common
 	$(STAGING_DIR_HOST)/bin/mksquashfs4 $(call mkfs_target_dir,$(1)) $@ \
 		-nopad -noappend -root-owned \
-		-comp $(SQUASHFSCOMP) $(SQUASHFSOPT) \
-		-processors 1
+		-comp $(SQUASHFSCOMP) $(SQUASHFSOPT)
 endef
 
 ifeq ($(CONFIG_TARGET_ROOTFS_SECURITY_LABELS),y)
@@ -441,6 +440,14 @@ else
   DEVICE_CHECK_PROFILE = $(CONFIG_TARGET_$(if $(CONFIG_TARGET_MULTI_PROFILE),DEVICE_)$(call target_conf,$(BOARD)$(if $(SUBTARGET),_$(SUBTARGET)))_$(1))
 endif
 
+ROOTFS_ENCRYPT = $(if $(ROE_KEY_DIR),$(wildcard $(ROE_KEY_DIR)/$(ROE_KEY_NAME).key),)
+
+DEVICE_CHECK_FIT_KEY = $(if $(wildcard $(FIT_KEY_DIR)/$(FIT_KEY_NAME).key),install-images,install-disabled)
+DEVICE_CHECK_FIT_DIR = $(if $(FIT_KEY_DIR),$(DEVICE_CHECK_FIT_KEY),install-disabled)
+
+DEVICE_CHECK_OFFLINE_FIT_KEY = $(if $(filter offline%,$(FIT_KEY_NAME)),install-images,$(DEVICE_CHECK_FIT_DIR))
+DEVICE_CHECK_FIT_KEY_NAME = $(if $(FIT_KEY_NAME),$(DEVICE_CHECK_OFFLINE_FIT_KEY),install-images)
+
 DEVICE_EXTRA_PACKAGES = $(call qstrip,$(CONFIG_TARGET_DEVICE_PACKAGES_$(call target_conf,$(BOARD)$(if $(SUBTARGET),_$(SUBTARGET)))_DEVICE_$(1)))
 
 define merge_packages
@@ -463,7 +470,7 @@ endef
 define Device/Check
   $(Device/Check/Common)
   KDIR_KERNEL_IMAGE := $(KDIR)/$(1)$$(KERNEL_SUFFIX)
-  _TARGET := $$(if $$(_PROFILE_SET),install-images,install-disabled)
+  _TARGET := $$(if $$(_PROFILE_SET),$$(DEVICE_CHECK_FIT_KEY_NAME),install-disabled)
   ifndef IB
     _COMPILE_TARGET := $$(if $(CONFIG_IB)$$(_PROFILE_SET),compile,compile-disabled)
   endif
@@ -525,6 +532,21 @@ define Device/Build/compile
 
 endef
 
+define Device/Build/per-device-fs
+  ROOTFS/$(1)/$(3) := \
+	$(KDIR)/root.$(1)$$(strip \
+		$$(if $$(FS_OPTIONS/$(1)),+fs=$$(call param_mangle,$$(FS_OPTIONS/$(1)))) \
+	)$$(strip \
+		$(if $(TARGET_PER_DEVICE_ROOTFS),+pkg=$$(ROOTFS_ID/$(3))) \
+	)
+  ifndef IB
+    $$(ROOTFS/$(1)/$(3)): $(if $(TARGET_PER_DEVICE_ROOTFS),target-dir-$$(ROOTFS_ID/$(3)))
+  endif
+
+  $$(KDIR_KERNEL_IMAGE): $$(ROOTFS/$(1)/$(3))
+
+endef
+
 ifndef IB
 define Device/Build/dtb
   ifndef BUILD_DTS_$(1)
@@ -555,6 +577,16 @@ define Device/Build/kernel
     ifdef CONFIG_IB
       install: $$(KDIR_KERNEL_IMAGE)
     endif
+    ifneq ($$(filter squashfs,$(2)),)
+      # Force squashfs to be built before generating kernel image
+      ROOTFS/squashfs/$(1) := \
+	$(KDIR)/root.squashfs$$(strip \
+		$$(if $$(FS_OPTIONS/squashfs),+fs=$$(call param_mangle,$$(FS_OPTIONS/squashfs))) \
+	)$$(strip \
+		$(if $(TARGET_PER_DEVICE_ROOTFS),+pkg=$$(ROOTFS_ID/$(1))) \
+	)
+      $$(KDIR_KERNEL_IMAGE): $$(ROOTFS/squashfs/$(1))
+    endif
     $$(KDIR_KERNEL_IMAGE): $(KDIR)/$$(KERNEL_NAME) $(CURDIR)/Makefile $$(KERNEL_DEPENDS) image_prepare
 	@rm -f $$@
 	$$(call concat_cmd,$$(KERNEL))
@@ -569,15 +601,6 @@ define Device/Build/image
 	  $(BIN_DIR)/$(call IMAGE_NAME,$(1),$(2))$$(GZ_SUFFIX))
   $(eval $(call Device/Export,$(KDIR)/tmp/$(call IMAGE_NAME,$(1),$(2)),$(1)))
 
-  ROOTFS/$(1)/$(3) := \
-	$(KDIR)/root.$(1)$$(strip \
-		$$(if $$(FS_OPTIONS/$(1)),+fs=$$(call param_mangle,$$(FS_OPTIONS/$(1)))) \
-	)$$(strip \
-		$(if $(TARGET_PER_DEVICE_ROOTFS),+pkg=$$(ROOTFS_ID/$(3))) \
-	)
-  ifndef IB
-    $$(ROOTFS/$(1)/$(3)): $(if $(TARGET_PER_DEVICE_ROOTFS),target-dir-$$(ROOTFS_ID/$(3)))
-  endif
   $(KDIR)/tmp/$(call IMAGE_NAME,$(1),$(2)): $$(KDIR_KERNEL_IMAGE) $$(ROOTFS/$(1)/$(3))
 	@rm -f $$@
 	[ -f $$(word 1,$$^) -a -f $$(word 2,$$^) ]
@@ -638,8 +661,12 @@ define Device/Build/artifact
 endef
 
 define Device/Build
+  $$(eval $$(foreach image,$$(IMAGES), \
+    $$(foreach fs,$$(filter $(TARGET_FILESYSTEMS),$$(FILESYSTEMS)), \
+      $$(call Device/Build/per-device-fs,$$(fs),$$(image),$(1)))))
+
   $(if $(CONFIG_TARGET_ROOTFS_INITRAMFS),$(call Device/Build/initramfs,$(1)))
-  $(call Device/Build/kernel,$(1))
+  $(call Device/Build/kernel,$(1),$$(filter $(TARGET_FILESYSTEMS),$$(FILESYSTEMS)))
 
   $$(eval $$(foreach compile,$$(COMPILE), \
     $$(call Device/Build/compile,$$(compile),$(1))))

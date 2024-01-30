@@ -128,6 +128,12 @@ MAKE_VARS = \
 	CXXFLAGS="$(TARGET_CXXFLAGS) $(EXTRA_CXXFLAGS) $(TARGET_CPPFLAGS) $(EXTRA_CPPFLAGS)" \
 	LDFLAGS="$(TARGET_LDFLAGS) $(EXTRA_LDFLAGS)"
 
+BUILD_LOGGER_VARS = \
+	LD_PRELOAD="$(STAGING_DIR_HOST)/lib/ldlogger.so" \
+	CC_LOGGER_GCC_LIKE="gcc:g++:clang:clang++:cc:c++" \
+	CC_LOGGER_FILE="$(PKG_BUILD_DIR)/compile_commands.json" \
+	CC_LOGGER_KEEP_LINK=true
+
 MAKE_FLAGS = \
 	$(TARGET_CONFIGURE_OPTS) \
 	CROSS="$(TARGET_CROSS)" \
@@ -144,6 +150,19 @@ define Build/Compile/Default
 	$(MAKE) $(PKG_JOBS) -C $(PKG_BUILD_DIR)/$(MAKE_PATH) \
 		$(MAKE_FLAGS) \
 		$(1);
+endef
+
+GCC_LIB_INC := $(wildcard $(TOOLCHAIN_DIR)/lib/gcc/$(shell $(TARGET_CC) -dumpmachine)/$(shell $(TARGET_CC) --version | head -1 | rev | cut -d ' ' -f 1 | rev)/include)
+ifneq ($(GCC_LIB_INC),)
+define Build/WriteClangdConfig/GccLibInc
+	echo "  Add: -I$(GCC_LIB_INC)" >> $(PKG_BUILD_DIR)/.clangd
+endef
+endif
+
+define Build/WriteClangdConfig
+	echo "CompileFlags:" > $(PKG_BUILD_DIR)/.clangd
+	$(Build/WriteClangdConfig/GccLibInc)
+	echo "  Remove: -mabi=*" >> $(PKG_BUILD_DIR)/.clangd
 endef
 
 define Build/Install/Default

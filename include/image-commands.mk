@@ -87,7 +87,7 @@ define Build/append-ubi
 		$(if $(UBOOTENV_IN_UBI),--uboot-env) \
 		$(if $(KERNEL_IN_UBI),--kernel $(IMAGE_KERNEL)) \
 		$(foreach part,$(UBINIZE_PARTS),--part $(part)) \
-		$(IMAGE_ROOTFS) \
+		$(call param_get_default,rootfs,$(1),$(IMAGE_ROOTFS)) \
 		$@.tmp \
 		-p $(BLOCKSIZE:%k=%KiB) -m $(PAGESIZE) \
 		$(if $(SUBPAGESIZE),-s $(SUBPAGESIZE)) \
@@ -202,8 +202,9 @@ define Build/fit
 		$(if $(word 2,$(1)),-d $(word 2,$(1))) -C $(word 1,$(1)) \
 		-a $(KERNEL_LOADADDR) -e $(if $(KERNEL_ENTRY),$(KERNEL_ENTRY),$(KERNEL_LOADADDR)) \
 		$(if $(DEVICE_FDT_NUM),-n $(DEVICE_FDT_NUM)) \
-		-c $(if $(DEVICE_DTS_CONFIG),$(DEVICE_DTS_CONFIG),"config@1") \
-		-A $(LINUX_KARCH) -v $(LINUX_VERSION)
+		-c $(if $(DEVICE_DTS_CONFIG),$(DEVICE_DTS_CONFIG),"config-1") \
+		-A $(LINUX_KARCH) -v $(LINUX_VERSION) \
+		$(if $(CONFIG_TARGET_ROOTFS_SQUASHFS),-R $(ROOTFS/squashfs/$(DEVICE_NAME)))
 	PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) mkimage -f $@.its $@.new
 	@mv $@.new $@
 endef

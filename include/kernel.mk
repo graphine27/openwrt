@@ -98,6 +98,12 @@ else
   LINUX_KARCH := $(ARCH)
 endif
 
+KERNEL_VARS = \
+	LD_PRELOAD="$(STAGING_DIR_HOST)/lib/ldlogger.so" \
+	CC_LOGGER_GCC_LIKE="gcc:g++:clang:clang++:cc:c++" \
+	CC_LOGGER_FILE="$(LINUX_DIR)/compile_commands.json" \
+	CC_LOGGER_KEEP_LINK=true
+
 KERNEL_MAKE = $(MAKE) $(KERNEL_MAKEOPTS)
 
 KERNEL_MAKE_FLAGS = \

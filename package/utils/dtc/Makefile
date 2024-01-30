@@ -18,7 +18,10 @@ PKG_INSTALL:=1
 PKG_MAINTAINER:=Yousong Zhou <yszhou4tech@gmail.com>
 
 include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/host-build.mk
 
+HOST_BUILD_PREFIX:=$(STAGING_DIR_HOST)
+HOST_BUILD_DIR:=$(BUILD_DIR_HOST)/$(PKG_NAME)-$(PKG_VERSION)
 
 define Package/dtc
   SECTION:=utils
@@ -89,6 +92,13 @@ define Build/InstallDev
 	$(CP) $(PKG_INSTALL_DIR)/lib/* $(1)/usr/lib
 endef
 
+define Host/Install
+	$(CP) $(HOST_BUILD_DIR)/libfdt/libfdt*.so* $(STAGING_DIR_HOST)/lib/
+	$(CP) $(HOST_BUILD_DIR)/fdtget $(STAGING_DIR_HOST)/bin/
+	$(CP) $(HOST_BUILD_DIR)/fdtput $(STAGING_DIR_HOST)/bin/
+endef
+
 $(eval $(call BuildPackage,dtc))
 $(eval $(call BuildPackage,fdt-utils))
 $(eval $(call BuildPackage,libfdt))
+$(eval $(call HostBuild))

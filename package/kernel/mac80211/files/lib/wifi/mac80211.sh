@@ -1,60 +1,47 @@
 #!/bin/sh
-. /lib/netifd/mac80211.sh
 
 append DRIVERS "mac80211"
 
-lookup_phy() {
-	[ -n "$phy" ] && {
-		[ -d /sys/class/ieee80211/$phy ] && return
-	}
-
-	local devpath
-	config_get devpath "$device" path
-	[ -n "$devpath" ] && {
-		phy="$(mac80211_path_to_phy "$devpath")"
-		[ -n "$phy" ] && return
-	}
-
-	local macaddr="$(config_get "$device" macaddr | tr 'A-Z' 'a-z')"
-	[ -n "$macaddr" ] && {
-		for _phy in /sys/class/ieee80211/*; do
-			[ -e "$_phy" ] || continue
-
-			[ "$macaddr" = "$(cat ${_phy}/macaddress)" ] || continue
-			phy="${_phy##*/}"
-			return
-		done
-	}
-	phy=
-	return
-}
-
-find_mac80211_phy() {
+check_mac80211_device() {
 	local device="$1"
+	local path="$2"
+	local macaddr="$3"
 
+	[ -n "$found" ] && return 0
+
+	phy_path=
 	config_get phy "$device" phy
-	lookup_phy
-	[ -n "$phy" -a -d "/sys/class/ieee80211/$phy" ] || {
-		echo "PHY for wifi device $1 not found"
-		return 1
+	json_select wlan
+	[ -n "$phy" ] && case "$phy" in
+		phy*)
+			[ -d /sys/class/ieee80211/$phy ] && \
+				phy_path="$(iwinfo nl80211 path "$dev")"
+		;;
+		*)
+			if json_is_a "$phy" object; then
+				json_select "$phy"
+				json_get_var phy_path path
+				json_select ..
+			elif json_is_a "${phy%.*}" object; then
+				json_select "${phy%.*}"
+				json_get_var phy_path path
+				json_select ..
+				phy_path="$phy_path+${phy##*.}"
+			fi
+		;;
+	esac
+	json_select ..
+	[ -n "$phy_path" ] || config_get phy_path "$device" path
+	[ -n "$path" -a "$phy_path" = "$path" ] && {
+		found=1
+		return 0
 	}
-	config_set "$device" phy "$phy"
 
-	config_get macaddr "$device" macaddr
-	[ -z "$macaddr" ] && {
-		config_set "$device" macaddr "$(cat /sys/class/ieee80211/${phy}/macaddress)"
-	}
+	config_get dev_macaddr "$device" macaddr
+
+	[ -n "$macaddr" -a "$dev_macaddr" = "$macaddr" ] && found=1
 
 	return 0
-}
-
-check_mac80211_device() {
-	config_get phy "$1" phy
-	[ -z "$phy" ] && {
-		find_mac80211_phy "$1" >/dev/null || return 0
-		config_get phy "$1" phy
-	}
-	[ "$phy" = "$dev" ] && found=1
 }
 
 
@@ -73,6 +60,9 @@ BEGIN {
 		if (vht && band != "1:") mode="VHT80"
 		if (he) mode="HE80"
 		if (he && band == "1:") mode="HE20"
+		if (eht && band == "2:") mode="EHT160"
+		if (eht && band == "4:") mode="EHT320"
+		if (eht && band == "1:") mode="EHT20"
                 sub("\\[", "", channel)
                 sub("\\]", "", channel)
                 bands = bands band channel ":" mode " "
@@ -86,6 +76,7 @@ $1 == "Band" {
 	vht = ""
 	ht = ""
 	he = ""
+	eht = ""
 }
 
 $0 ~ "Capabilities:" {
@@ -98,6 +89,18 @@ $0 ~ "VHT Capabilities" {
 
 $0 ~ "HE Iftypes" {
 	he=1
+}
+
+$0 ~ "EHT Iftypes" {
+	eht=1
+}
+
+$0 ~ / *HE MAC Capabilities \(0x000000000000\)/ {
+	he=0
+}
+
+$0 ~ / *EHT MAC Capabilities \(0x0000\)/ {
+	eht=0
 }
 
 $1 == "*" && $3 == "MHz" && $0 !~ /disabled/ && band && !channel {
@@ -133,59 +136,177 @@ get_band_defaults() {
 		mode_band="$band"
 		channel="$chan"
 		htmode="$mode"
+		if [ "$band" = "6g" ]
+		then
+			encryption=sae
+			key=12345678
+			sae_pwe=2
+			ieee80211w=2
+			channel=37
+			mbssid=1
+			mbo=1
+		elif [ "$band" = "5g" ]
+		then
+			noscan=1
+			encryption=none
+			rnr=1
+			background_radar=1
+		else
+			noscan=1
+			encryption=none
+			rnr=1
+		fi
 	done
+}
+
+check_devidx() {
+	case "$1" in
+	radio[0-9]*)
+		local idx="${1#radio}"
+		[ "$devidx" -ge "${1#radio}" ] && devidx=$((idx + 1))
+		;;
+	esac
+}
+
+check_board_phy() {
+	local name="$2"
+
+	json_select "$name"
+	json_get_var phy_path path
+	json_select ..
+
+	if [ "$path" = "$phy_path" ]; then
+		board_dev="$name"
+	elif [ "${path%+*}" = "$phy_path" ]; then
+		fallback_board_dev="$name.${path#*+}"
+	fi
 }
 
 detect_mac80211() {
 	devidx=0
 	config_load wireless
-	while :; do
-		config_get type "radio$devidx" type
-		[ -n "$type" ] || break
-		devidx=$(($devidx + 1))
-	done
+	config_foreach check_devidx wifi-device
+
+	json_load_file /etc/board.json
+
+	# generate random bytes for macaddr
+	rand=$(hexdump -C /dev/urandom | head -n 1 &)
+	killall hexdump
 
 	for _dev in /sys/class/ieee80211/*; do
 		[ -e "$_dev" ] || continue
 
 		dev="${_dev##*/}"
 
-		found=0
-		config_foreach check_mac80211_device wifi-device
-		[ "$found" -gt 0 ] && continue
-
 		mode_band=""
 		channel=""
 		htmode=""
 		ht_capab=""
+		encryption=""
+		noscan=""
+		key=""
+		sae_pwe=""
+		ieee80211w=""
+		mbssid=""
+		rnr=""
+		background_radar=""
 
 		get_band_defaults "$dev"
 
-		path="$(mac80211_phy_to_path "$dev")"
-		if [ -n "$path" ]; then
-			dev_id="set wireless.radio${devidx}.path='$path'"
-		else
-			dev_id="set wireless.radio${devidx}.macaddr=$(cat /sys/class/ieee80211/${dev}/macaddress)"
+		path="$(iwinfo nl80211 path "$dev")"
+		macaddr="$(cat /sys/class/ieee80211/${dev}/macaddress)"
+
+		# work around phy rename related race condition
+		[ -n "$path" -o -n "$macaddr" ] || continue
+
+		board_dev=
+		fallback_board_dev=
+		json_for_each_item check_board_phy wlan
+		[ -n "$board_dev" ] || board_dev="$fallback_board_dev"
+		[ -n "$board_dev" ] && dev="$board_dev"
+
+		found=
+		config_foreach check_mac80211_device wifi-device "$path" "$macaddr"
+		[ -n "$found" ] && continue
+
+		name="radio${devidx}"
+		devidx=$(($devidx + 1))
+		case "$dev" in
+			phy*)
+				if [ -n "$path" ]; then
+					dev_id="set wireless.${name}.path='$path'"
+				else
+					dev_id="set wireless.${name}.macaddr='$macaddr'"
+				fi
+				;;
+			*)
+				dev_id="set wireless.${name}.phy='$dev'"
+				;;
+		esac
+
+		macaddr=""
+		if (dmesg | grep -q "eeprom load fail"); then
+			for i in $(seq 2 3); do
+				macaddr=${macaddr}:$(echo $rand | cut -d ' ' -f $i)
+			done
+			macaddr="00:0$(($devidx - 1)):55:66${macaddr}"
+		fi
+
+		tx_burst=""
+		if (lspci | grep -q "7992"); then
+			tx_burst=0.0
 		fi
 
 		uci -q batch <<-EOF
-			set wireless.radio${devidx}=wifi-device
-			set wireless.radio${devidx}.type=mac80211
+			set wireless.${name}=wifi-device
+			set wireless.${name}.type=mac80211
 			${dev_id}
-			set wireless.radio${devidx}.channel=${channel}
-			set wireless.radio${devidx}.band=${mode_band}
-			set wireless.radio${devidx}.htmode=$htmode
-			set wireless.radio${devidx}.disabled=1
-
-			set wireless.default_radio${devidx}=wifi-iface
-			set wireless.default_radio${devidx}.device=radio${devidx}
-			set wireless.default_radio${devidx}.network=lan
-			set wireless.default_radio${devidx}.mode=ap
-			set wireless.default_radio${devidx}.ssid=OpenWrt
-			set wireless.default_radio${devidx}.encryption=none
+			set wireless.${name}.channel=${channel}
+			set wireless.${name}.band=${mode_band}
+			set wireless.${name}.htmode=$htmode
+			set wireless.${name}.country='US'
+			set wireless.${name}.noscan=${noscan}
+			set wireless.${name}.disabled=0
 EOF
-		uci -q commit wireless
+		[ -n "$mbssid" ] && {
+			uci -q set wireless.${name}.mbssid=${mbssid}
+		}
+		[ -n "$rnr" ] && {
+			uci -q set wireless.${name}.rnr=${rnr}
+		}
+		[ -n "$background_radar" ] && {
+			uci -q set wireless.${name}.background_radar=${background_radar}
+		}
+		[ -n "$tx_burst" ] && {
+			uci -q set wireless.${name}.tx_burst=${tx_burst}
+		}
 
-		devidx=$(($devidx + 1))
+		uci -q batch <<-EOF
+			set wireless.default_${name}=wifi-iface
+			set wireless.default_${name}.device=${name}
+			set wireless.default_${name}.network=lan
+			set wireless.default_${name}.mode=ap
+			set wireless.default_${name}.ssid=OpenWrt-${mode_band}
+			set wireless.default_${name}.encryption=${encryption}
+EOF
+
+		# calibrated board will use eeprom macaddress, not ramdom address
+		[ -n "$macaddr" ] && {
+			uci -q set wireless.default_${name}.macaddr=${macaddr}
+		}
+
+		[ -n "$key" ] && {
+			uci -q set wireless.default_${name}.key=${key}
+		}
+		[ -n "$sae_pwe" ] && {
+			uci -q set wireless.default_${name}.sae_pwe=${sae_pwe}
+		}
+		[ -n "$ieee80211w" ] && {
+			uci -q set wireless.default_${name}.ieee80211w=${ieee80211w}
+		}
+		[ -n "$mbo" ] && {
+			uci -q set wireless.default_${name}.mbo=${mbo}
+		}
+		uci -q commit wireless
 	done
 }

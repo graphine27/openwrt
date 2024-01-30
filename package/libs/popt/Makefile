@@ -20,15 +20,17 @@ PKG_HASH:=e728ed296fe9f069a0e005003c3d6b2dde3d9cad453422a10d6558616d304cc8
 PKG_LICENSE:=MIT
 PKG_CPE_ID:=cpe:/a:popt_project:popt
 
-PKG_FIXUP:=autoreconf
-PKG_REMOVE_FILES:=autogen.sh aclocal.m4
-
 PKG_INSTALL:=1
 PKG_BUILD_PARALLEL:=1
 
+HOST_BUILD_PREFIX:=$(STAGING_DIR_HOST)
+
 include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/host-build.mk
 
 TARGET_CFLAGS += $(FPIC)
+HOST_CONFIGURE_ARGS += --enable-libiconv-tiny
+HOST_BUILD_DEPENDS := libiconv/host
 
 define Package/libpopt
   SECTION:=libs
@@ -55,4 +57,4 @@ define Package/libpopt/install
 endef
 
 $(eval $(call BuildPackage,libpopt))
-
+$(eval $(call HostBuild))

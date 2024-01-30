@@ -99,7 +99,7 @@ ifdef CONFIG_MIPS64_ABI
   endif
 endif
 
-DEFAULT_SUBDIR_TARGETS:=clean download prepare compile update refresh prereq dist distcheck configure check check-depends
+DEFAULT_SUBDIR_TARGETS:=clean download prepare compile update refresh prereq dist distcheck configure check check-depends install-image clean-linux
 
 define DefaultTargets
 $(foreach t,$(DEFAULT_SUBDIR_TARGETS) $(1),
