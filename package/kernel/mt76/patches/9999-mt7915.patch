@@ -1,0 +1,94 @@
+diff --git a/mt7915/dma.c b/mt7915/dma.c
+index c91a1c5..8c333bf 100644
+--- a/mt7915/dma.c
++++ b/mt7915/dma.c
+@@ -624,13 +624,13 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
+ 	}
+ 
+ 	for (i = 0; i < __MT_MCUQ_MAX; i++)
+-		mt76_queue_reset(dev, dev->mt76.q_mcu[i]);
++		mt76_queue_reset(dev, dev->mt76.q_mcu[i], true);
+ 
+ 	mt76_for_each_q_rx(&dev->mt76, i) {
+ 		if (mt76_queue_is_wed_tx_free(&dev->mt76.q_rx[i]))
+ 			continue;
+ 
+-		mt76_queue_reset(dev, &dev->mt76.q_rx[i]);
++		mt76_queue_reset(dev, &dev->mt76.q_rx[i], true);
+ 	}
+ 
+ 	mt76_tx_status_check(&dev->mt76, true);
+diff --git a/mt7915/init.c b/mt7915/init.c
+index 11c4621..a165e24 100644
+--- a/mt7915/init.c
++++ b/mt7915/init.c
+@@ -282,6 +282,7 @@ static void __mt7915_init_txpower(struct mt7915_phy *phy,
+ 	int nss_delta = mt76_tx_power_nss_delta(n_chains);
+ 	int pwr_delta = mt7915_eeprom_get_power_delta(dev, sband->band);
+ 	struct mt76_power_limits limits;
++	struct mt76_power_path_limits limits_path;
+ 
+ 	for (i = 0; i < sband->n_channels; i++) {
+ 		struct ieee80211_channel *chan = &sband->channels[i];
+@@ -298,6 +299,7 @@ static void __mt7915_init_txpower(struct mt7915_phy *phy,
+ 		target_power += pwr_delta;
+ 		target_power = mt76_get_rate_power_limits(phy->mt76, chan,
+ 							  &limits,
++							  &limits_path,
+ 							  target_power);
+ 		target_power += nss_delta;
+ 		target_power = DIV_ROUND_UP(target_power, 2);
+diff --git a/mt7915/mcu.c b/mt7915/mcu.c
+index 2718ba5..5407d32 100644
+--- a/mt7915/mcu.c
++++ b/mt7915/mcu.c
+@@ -3258,13 +3258,14 @@ int mt7915_mcu_set_txpower_sku(struct mt7915_phy *phy)
+ 		.band_idx = phy->mt76->band_idx,
+ 	};
+ 	struct mt76_power_limits limits_array;
++	struct mt76_power_path_limits limits_path;
+ 	s8 *la = (s8 *)&limits_array;
+ 	int i, idx;
+ 	int tx_power;
+ 
+ 	tx_power = mt7915_get_power_bound(phy, hw->conf.power_level);
+ 	tx_power = mt76_get_rate_power_limits(mphy, mphy->chandef.chan,
+-					      &limits_array, tx_power);
++					      &limits_array, &limits_path, tx_power);
+ 	mphy->txpower_cur = tx_power;
+ 
+ 	for (i = 0, idx = 0; i < ARRAY_SIZE(mt7915_sku_group_len); i++) {
+diff --git a/mt7915/mmio.c b/mt7915/mmio.c
+index 9657636..c9503f0 100644
+--- a/mt7915/mmio.c
++++ b/mt7915/mmio.c
+@@ -628,7 +628,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
+ 					 MT_RXQ_WED_RING_BASE;
+ 		wed->wlan.wpdma_rx_glo = pci_resource_start(pci_dev, 0) +
+ 					 MT_WPDMA_GLO_CFG;
+-		wed->wlan.wpdma_rx = pci_resource_start(pci_dev, 0) +
++		wed->wlan.wpdma_rx[0] = pci_resource_start(pci_dev, 0) +
+ 				     MT_RXQ_WED_DATA_RING_BASE;
+ 	} else {
+ 		struct platform_device *plat_dev = pdev_ptr;
+@@ -648,7 +648,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
+ 		wed->wlan.wpdma_tx = res->start + MT_TXQ_WED_RING_BASE;
+ 		wed->wlan.wpdma_txfree = res->start + MT_RXQ_WED_RING_BASE;
+ 		wed->wlan.wpdma_rx_glo = res->start + MT_WPDMA_GLO_CFG;
+-		wed->wlan.wpdma_rx = res->start + MT_RXQ_WED_DATA_RING_BASE;
++		wed->wlan.wpdma_rx[0] = res->start + MT_RXQ_WED_DATA_RING_BASE;
+ 	}
+ 	wed->wlan.nbuf = MT7915_HW_TOKEN_SIZE;
+ 	wed->wlan.tx_tbit[0] = is_mt7915(&dev->mt76) ? 4 : 30;
+@@ -886,7 +886,7 @@ struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
+ 				SURVEY_INFO_TIME_RX |
+ 				SURVEY_INFO_TIME_BSS_RX,
+ 		.token_size = MT7915_TOKEN_SIZE,
+-		.rx_token_size = MT7915_RX_TOKEN_SIZE;
++		.rx_token_size = MT7915_RX_TOKEN_SIZE,
+ 		.tx_prepare_skb = mt7915_tx_prepare_skb,
+ 		.tx_complete_skb = mt76_connac_tx_complete_skb,
+ 		.rx_skb = mt7915_queue_rx_skb,
+--
+libgit2 1.7.1
+

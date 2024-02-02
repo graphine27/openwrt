@@ -1,0 +1,6 @@
+#!/bin/sh /etc/rc.common
+
+if [ ! -f /sys/class/pwm/pwmchip0/export ]; then
+	exit 0
+fi
+

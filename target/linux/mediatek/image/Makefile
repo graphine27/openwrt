@@ -6,6 +6,33 @@
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
 
+ifeq ($(SUBTARGET),mt7988)
+define Image/Build/SDImage
+	./make_bpi-r4_bundle_image.sh 	$(BIN_DIR)/mtk-bpi-r4-SD.img \
+                               		./bpi-r4/GPT_SD \
+                               		./bpi-r4/bl2_sd.img \
+                               		./bpi-r4/fip_sd.bin \
+                               		$(KDIR)/BPI-R4-SD-kernel.bin \
+                               		$(KDIR)/root.squashfs
+endef
+
+define Image/Build/EMMCImage
+	./make_bpi-r4_bundle_image.sh 	$(BIN_DIR)/mtk-bpi-r4-EMMC.img \
+                               		./bpi-r4/GPT_EMMC \
+                               		./bpi-r4/bl2_emmc.img \
+                               		./bpi-r4/fip_emmc.bin \
+                               		$(KDIR)/BPI-R4-EMMC-kernel.bin \
+                               		$(KDIR)/root.squashfs
+endef
+
+define Image/Build/NANDImage
+	./make_bpi-r4_bundle_nandimage.sh 	$(BIN_DIR)/mtk-bpi-r4-NAND.img \
+                               			./bpi-r4/bl2_nand.img \
+                               			./bpi-r4/fip_nand.bin \
+                               			$(BIN_DIR)/openwrt-mediatek-mt7988-BPI-R4-NAND-squashfs-factory.bin
+endef
+endif
+
 define Build/sysupgrade-emmc
 	rm -f $@.recovery
 	mkfs.fat -C $@.recovery 3070
@@ -156,6 +183,9 @@ endef
 include $(SUBTARGET).mk
 
 define Image/Build
+	$(call Image/Build/SDImage,$(1))
+#	$(call Image/Build/EMMCImage,$(1))
+#	$(call Image/Build/NANDImage,$(1))
 	$(call Image/Build/$(1),$(1))
 endef
 
